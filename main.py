@@ -87,3 +87,5 @@ class TestLogic(unittest.TestCase):
         self.assertTrue("&" not in sample_password1)
         self.assertTrue("(" not in sample_password2)
 unittest.main()
+
+#some text
