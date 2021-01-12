@@ -1,91 +1,157 @@
-"""
-
-Соблюдать правила форматирования кода (методы не длиннее 10 строк)
-с python type hints
-Протестировать код через бибилотеку unittest
-
-"""
-
 import random
 import requests
-from bs4 import BeautifulSoup
 import re
 import unittest
+from typing import List
+from bs4 import BeautifulSoup
 
 
-def symbols ():
-    symbols_a_z = [i for i in range(97, 123)]
-    another_symbols = [33, 37, 45, 63]
-    numbers = [i for i in range(48,58)]
-    all_symbols= symbols_a_z + another_symbols + numbers
-    return all_symbols
+class PasswordTool:
 
-def password (userlength):
-    if userlength > 17:
-        raise ValueError
-    elif isinstance(userlength, str):
-        raise TypeError
+    """
+    dictionary_url = Атрибут класса, можно получить по форме
+                     PasswordTool.dictionary_url
+    """
 
-    all_symbols = symbols()
-    password = ""
-    list_length = len(all_symbols) -1
+    dictionary_url = "https://www.ef.com/wwen/english-resources/english-vocabulary/top-1000-words/"
 
-    for i in range(0, userlength):
-        randomNumber = random.randint(0, list_length)
-        selectnumber = all_symbols[randomNumber]
-        selectnumber= chr(selectnumber)
-        password += selectnumber
+    def __init__(self, **kwargs):
+        """
+        :param kwargs: принимает неопределенное количество аргументов
+        с ключом. Аргументы можно получить по форме kwargs.get("название аргумента")
 
-    return password
+        self.user_password = kwargs.get("user_password") or None означает:
 
-def wordsearch (something):
-    wordscan = requests.get("https://www.ef.com/wwen/english-resources/english-vocabulary/top-1000-words/")
-    html = wordscan.content
-    soup = BeautifulSoup(html, features="html.parser")
-    words = soup.select("div.field-items>div.field-item>p")
-    wordlist = []
+        Если передан аргумент user_password, то self.user_password равно user_password
+        Если не передан, то self.user_password равно None
+        """
+        self.user_password = kwargs.get("user_password") or None
+        self.required_length = kwargs.get("required_length") or None
+        self.user_password_length = len(self.user_password) if self.user_password else None
 
-    for word in words[1]:
-        try:
-            wordlist.append((re.findall(pattern=r"\w+", string=word.string)[0]))
-        except (AttributeError, TypeError):
-            pass
+        self.options = None
+        self.options_length = None
 
-    del wordlist[0]
-    if something in wordlist:
-        return "Wrong Password"
-    else:
-        return "Good Password"
+    @staticmethod
+    def get_legit_characters() -> list:
 
-class TestLogic(unittest.TestCase):
+        characters = [chr(character) for character in range(97, 123)]
+        extra_characters = [chr(character) for character in [33, 37, 45, 63]]
+        digits = [digit for digit in range(0, 10)]
 
-    def test_wrong_password(self):
-        wrong_password = "general"
-        self.assertEqual(wordsearch(wrong_password),"Wrong Password")
+        return characters+extra_characters+digits
 
-    def test_good_password(self):
-        good_password = "4sad?!12"
-        self.assertEqual(wordsearch(good_password),"Good Password")
+    def __make_password(self, length) -> str:
 
-    def test_correct_generate(self):
-        self.assertEqual(len(password(5)), 5)
+        """
+        join объединяет элементы списка через символ, который
+        передается в скобках
+        :param length:
+        :return:
+        """
 
-    def test_raises_error(self):
+        self.options = PasswordTool.get_legit_characters()
+        self.options_length = len(self.options)
+
+        return "".join(
+            [str(self.options[random.randint(0, self.options_length)]) for _ in range(0, length)]
+        )
+
+    def __generate(self, length) -> str:
+        """
+        метод пытается создать пароль, который
+        не является словом
+        :param length:
+        :return:
+        """
+        password = self.__make_password(length)
+
+        while not self.is_good(password):
+            password = self.__make_password(length)
+
+        return password
+
+    def main(self) -> str:
+        """
+        Выбираем действие в зависимости от
+        переданных аргументов в __init__()
+        :return:
+        """
+        if self.user_password and not PasswordTool.is_good(self.user_password):
+            return self.__generate(self.user_password_length)
+        elif self.user_password and self.is_good(self.user_password):
+            return self.user_password
+        elif not self.user_password and self.required_length:
+            return self.__generate(self.required_length)
+        else:
+            raise ValueError("Nothing to do!")
+
+    @staticmethod
+    def make_soup(url) -> "BeautifulSoup":
+        response = requests.get(url)
+        html = response.content
+
+        return BeautifulSoup(html, features="html.parser")
+
+    @staticmethod
+    def get_words(soup: "BeautifulSoup") -> List[str]:
+        """
+        получаем слова из soup и сохраняем
+        в список wordlist
+        :param soup:
+        :return:
+        """
+
+        words = soup.select("div.field-items>div.field-item>p")
+        wordlist = []
+
+        for word in words[1]:
+            try:
+                wordlist.append((re.findall(pattern=r"\w+", string=word.string)[0]))
+            except (AttributeError, TypeError):
+                pass
+
+        del wordlist[0]
+
+        return wordlist
+
+    @staticmethod
+    def is_good(something) -> bool:
+        """
+        возвращает True если пароль не слово или False
+        :param something:
+        :return:
+        """
+
+        soup = PasswordTool.make_soup(PasswordTool.dictionary_url)
+        wordlist = PasswordTool.get_words(soup)
+
+        return not something in wordlist
+
+
+class TestPasswordTool(unittest.TestCase):
+
+    def test_generate_good_password_for_bad_user_password(self):
+        bad_password = "general"
+
+        self.assertNotEqual(bad_password, PasswordTool(user_password=bad_password).main())
+
+    def test_return_user_password_if_user_password_is_good(self):
+        good_password = "jn4ju42ji"
+
+        self.assertEqual(good_password, PasswordTool(user_password=good_password).main())
+
+    def test_raise_error_nothing_to_do(self):
+
         with self.assertRaises(ValueError):
-            password(18)
 
-    def test_fails_on_string(self):
-        with self.assertRaises(TypeError):
-           password("AAAA")
+            PasswordTool().main()
 
-    def test_wrong_symbol(self):
-        sample_password0 = password (10)
-        sample_password1 = password (6)
-        sample_password2 = password (4)
+    def test_generate_password_on_request(self):
+        generated_password = PasswordTool(required_length=10).main()
 
-        self.assertTrue("*" not in sample_password0)
-        self.assertTrue("&" not in sample_password1)
-        self.assertTrue("(" not in sample_password2)
+        self.assertTrue(len(generated_password), 10)
+        self.assertTrue(PasswordTool.is_good(generated_password))
+
+
 unittest.main()
-
-#some text
